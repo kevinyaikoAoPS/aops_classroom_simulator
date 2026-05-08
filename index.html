@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AoPS Classroom Simulator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; background: #f5f5f3; color: #1a1a18; padding: 1.5rem; }
+  h1 { font-size: 16px; font-weight: 500; margin-bottom: 1rem; color: #1a1a18; }
+
+  /* View controls */
+  .view-controls { display: flex; gap: 6px; margin-bottom: 12px; }
+  .view-btn { font-size: 12px; padding: 5px 14px; border-radius: 8px; border: 0.5px solid #ccc; background: transparent; cursor: pointer; color: #555; }
+  .view-btn:hover { background: #eee; }
+  .view-btn.active { background: #e8e8e8; font-weight: 500; color: #1a1a18; }
+
+  /* Simulator layout */
+  .sim { display: grid; grid-template-columns: 1fr 220px; gap: 0; border: 0.5px solid #ddd; border-radius: 12px; overflow: hidden; background: #fff; }
+  .main-panel { display: flex; flex-direction: column; border-right: 0.5px solid #ddd; }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 0.5px solid #ddd; background: #f9f9f7; }
+  .toolbar-title { font-size: 12px; font-weight: 500; color: #666; flex: 1; }
+  .speed-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #999; }
+  .speed-wrap select { font-size: 11px; padding: 2px 4px; border-radius: 4px; border: 0.5px solid #ccc; background: #fff; color: #333; }
+
+  /* Classroom messages */
+  .classroom { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 6px; min-height: 320px; max-height: 400px; }
+  .msg { display: flex; flex-direction: column; gap: 2px; animation: fadein .25s ease; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .msg-header { display: flex; align-items: center; gap: 6px; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; flex-shrink: 0; }
+  .av-inst    { background: #E6F1FB; color: #185FA5; }
+  .av-student { background: #EAF3DE; color: #3B6D11; }
+  .av-whisper { background: #FAEEDA; color: #633806; }
+  .av-system  { background: #f0efea; color: #888; }
+  .msg-name { font-size: 11px; font-weight: 500; color: #666; }
+  .msg-time { font-size: 10px; color: #aaa; }
+  .msg-body { font-size: 12px; line-height: 1.5; color: #1a1a18; padding-left: 28px; }
+  .msg-body.whisper { color: #854F0B; font-style: italic; }
+  .msg-body.system  { color: #aaa; font-style: italic; font-size: 11px; }
+
+  /* Playback controls */
+  .controls { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 0.5px solid #ddd; background: #f9f9f7; }
+  .controls-left { flex: 1; display: flex; gap: 6px; }
+  .btn-sm { font-size: 11px; padding: 4px 10px; border-radius: 8px; border: 0.5px solid #ccc; background: transparent; cursor: pointer; color: #555; }
+  .btn-sm:hover { background: #eee; }
+  .btn-sm.active { background: #dbeeff; color: #185FA5; border-color: transparent; }
+  .progress-bar-wrap { flex: 1; height: 4px; background: #e0e0e0; border-radius: 2px; align-self: center; }
+  .progress-bar { height: 4px; background: #378ADD; border-radius: 2px; transition: width .5s; }
+  .msg-counter { font-size: 11px; color: #aaa; min-width: 40px; text-align: right; }
+
+  /* Queue panel */
+  .queue-panel { display: flex; flex-direction: column; }
+  .queue-header { font-size: 11px; font-weight: 500; color: #666; padding: 8px 12px; border-bottom: 0.5px solid #ddd; background: #f9f9f7; }
+  .q-count { font-size: 10px; color: #aaa; margin-left: 4px; }
+  .queue { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 5px; max-height: 400px; }
+  .q-item { border: 0.5px solid #ddd; border-radius: 8px; padding: 7px 9px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .q-item:hover  { border-color: #7ab8e8; background: #f0f7fd; }
+  .q-item.selected  { border-color: #378ADD; background: #e6f1fb; }
+  .q-item.responded { opacity: 0.4; pointer-events: none; }
+  .q-name { font-size: 11px; font-weight: 500; color: #1a1a18; }
+  .q-text { font-size: 11px; color: #666; margin-top: 2px; }
+  .q-badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; margin-left: 4px; }
+  .q-q    { background: #FAEEDA; color: #633806; }
+  .q-err  { background: #FCEBEB; color: #A32D2D; }
+  .q-idle { background: #f0efea; color: #666; }
+
+  /* Whisper area */
+  .whisper-area { border-top: 0.5px solid #ddd; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; background: #fff; }
+  .whisper-to { font-size: 11px; color: #666; }
+  .whisper-to span { font-weight: 500; color: #1a1a18; }
+  .notice { font-size: 12px; color: #aaa; padding: 10px; text-align: center; border: 0.5px dashed #ccc; border-radius: 8px; }
+  .whisper-input-row { display: flex; gap: 6px; }
+  .whisper-input-row textarea { flex: 1; font-size: 12px; padding: 6px 8px; border-radius: 8px; border: 0.5px solid #ccc; background: #fff; color: #1a1a18; resize: none; font-family: inherit; line-height: 1.4; }
+  .whisper-input-row textarea:focus { outline: none; border-color: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.15); }
+  .send-btn { font-size: 11px; padding: 0 12px; border-radius: 8px; border: 0.5px solid #ccc; background: transparent; cursor: pointer; color: #555; align-self: flex-end; height: 32px; }
+  .send-btn:hover { background: #eee; }
+  .send-btn.ready { background: #e6f1fb; color: #185FA5; border-color: transparent; }
+  .upload-hint { font-size: 11px; color: #aaa; padding: 6px 12px; border-top: 0.5px solid #ddd; text-align: center; background: #f9f9f7; border-radius: 0 0 12px 0; }
+
+  /* Report */
+  .report-section { padding: 1rem 0; }
+  .report-title { font-size: 15px; font-weight: 500; margin-bottom: .75rem; }
+  .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 1rem; }
+  .stat-card { background: #f5f5f3; border-radius: 8px; padding: 10px 12px; }
+  .stat-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+  .stat-val { font-size: 22px; font-weight: 500; }
+  .response-log { display: flex; flex-direction: column; gap: 8px; }
+  .log-item { border: 0.5px solid #ddd; border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .log-student { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+  .log-original { font-size: 11px; color: #888; margin-bottom: 6px; padding: 4px 8px; background: #f5f5f3; border-radius: 6px; }
+  .log-response { font-size: 12px; color: #1a1a18; margin-bottom: 6px; }
+  .tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; }
+  .tag-good    { background: #EAF3DE; color: #3B6D11; }
+  .tag-skipped { background: #FCEBEB; color: #A32D2D; }
+
+  /* Upload */
+  .upload-section { padding: 1rem 0; }
+  .upload-section p { font-size: 13px; color: #666; margin-bottom: 1rem; }
+  .upload-section code { font-size: 11px; background: #f0efea; padding: 1px 5px; border-radius: 4px; font-family: monospace; }
+  .upload-section textarea { width: 100%; font-size: 12px; padding: 8px; border-radius: 8px; border: 0.5px solid #ccc; background: #fff; color: #1a1a18; font-family: monospace; line-height: 1.5; }
+  .upload-section textarea:focus { outline: none; border-color: #378ADD; }
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+  .err-msg { font-size: 12px; color: #c0392b; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>AoPS Classroom Simulator</h1>
+
+<div class="view-controls">
+  <button class="view-btn active" onclick="showView('sim',this)">Classroom</button>
+  <button class="view-btn" onclick="showView('report',this)">Report</button>
+  <button class="view-btn" onclick="showView('upload',this)">Load transcript</button>
+</div>
+
+<!-- CLASSROOM VIEW -->
+<div id="view-sim">
+  <div class="sim">
+    <div class="main-panel">
+      <div class="toolbar">
+        <span class="toolbar-title" id="class-title">Algebra A — Lesson 4: Linear Equations</span>
+        <span class="speed-wrap">
+          Speed
+          <select id="speed-sel">
+            <option value="3000">0.5×</option>
+            <option value="1500" selected>1×</option>
+            <option value="750">2×</option>
+            <option value="300">5×</option>
+          </select>
+        </span>
+      </div>
+      <div class="classroom" id="classroom"></div>
+      <div class="controls">
+        <div class="controls-left">
+          <button class="btn-sm" id="play-btn" onclick="togglePlay()">Play</button>
+          <button class="btn-sm" onclick="resetSim()">Reset</button>
+        </div>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="prog-bar" style="width:0%"></div></div>
+        <span class="msg-counter" id="msg-counter">0 / 0</span>
+      </div>
+    </div>
+    <div class="queue-panel">
+      <div class="queue-header">Queue <span class="q-count" id="q-count">0 pending</span></div>
+      <div class="queue" id="queue"></div>
+      <div class="whisper-area" id="whisper-area">
+        <div class="whisper-to" id="whisper-to" style="display:none">Whispering to <span id="whisper-target">—</span></div>
+        <div class="notice" id="queue-notice">Select a student from the queue to respond</div>
+        <div class="whisper-input-row" id="whisper-row" style="display:none">
+          <textarea id="whisper-input" rows="2" placeholder="Type your whisper..."></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendWhisper()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="upload-hint">Using sample transcript — load your own CSV under "Load transcript"</div>
+</div>
+
+<!-- REPORT VIEW -->
+<div id="view-report" style="display:none">
+  <div class="report-section">
+    <div class="report-title">Session report</div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-label">Whispers sent</div><div class="stat-val" id="r-sent">0</div></div>
+      <div class="stat-card"><div class="stat-label">Queue items</div><div class="stat-val" id="r-total">0</div></div>
+      <div class="stat-card"><div class="stat-label">Skipped</div><div class="stat-val" id="r-skipped">0</div></div>
+    </div>
+    <div class="response-log" id="response-log">
+      <div class="notice">Complete the simulation to see your response log.</div>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD VIEW -->
+<div id="view-upload" style="display:none">
+  <div class="upload-section">
+    <p>Paste a CSV log below. Required columns: <code>timestamp, username, role, message</code></p>
+    <p style="font-size:12px;color:#aaa;margin-bottom:8px">Roles: <code>instructor</code>, <code>student</code>, <code>assistant</code>, <code>system</code> — timestamps in <code>m:ss</code> or seconds</p>
+    <textarea id="csv-input" rows="10" placeholder="timestamp,username,role,message&#10;0:00,System,system,Class starting...&#10;0:05,Ms. Chen,instructor,Welcome everyone!&#10;0:20,alex_m,student,hi!"></textarea>
+    <div class="btn-row">
+      <button class="btn-sm" onclick="loadCSV()">Load transcript</button>
+      <button class="btn-sm" onclick="loadSample()">Reset to sample</button>
+    </div>
+    <div class="err-msg" id="csv-error" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const SAMPLE = [
+  {t:0,   user:"System",     role:"system",     msg:"Class starting. You are the teaching assistant. Respond to students in the queue using whispers.", qtype:null},
+  {t:4,   user:"Mr. Rivera", role:"instructor", msg:"Welcome everyone! Today we're working on solving linear equations. First question: what does it mean to 'solve' an equation?", qtype:null},
+  {t:12,  user:"alex_m",     role:"student",    msg:"find the value of x?", qtype:"answer"},
+  {t:15,  user:"priya_k",    role:"student",    msg:"make both sides equal", qtype:"answer"},
+  {t:18,  user:"tommy_w",    role:"student",    msg:"idk", qtype:"confused"},
+  {t:22,  user:"Mr. Rivera", role:"instructor", msg:"Great! Solving means finding the value that makes the equation true. Now try: solve 2x + 5 = 13", qtype:null},
+  {t:32,  user:"alex_m",     role:"student",    msg:"x = 4", qtype:"answer"},
+  {t:34,  user:"priya_k",    role:"student",    msg:"x=4, subtract 5 then divide by 2", qtype:"answer"},
+  {t:36,  user:"tommy_w",    role:"student",    msg:"I got x = 9??", qtype:"error"},
+  {t:38,  user:"sarah_j",    role:"student",    msg:"wait how do you subtract first?", qtype:"question"},
+  {t:42,  user:"Mr. Rivera", role:"instructor", msg:"x = 4 is correct. We subtract 5 from both sides: 2x = 8, then divide by 2.", qtype:null},
+  {t:50,  user:"tommy_w",    role:"student",    msg:"ohhhh I forgot to subtract from BOTH sides", qtype:"realizing"},
+  {t:54,  user:"Mr. Rivera", role:"instructor", msg:"Exactly — both sides, always. Next: solve 3x - 7 = 14", qtype:null},
+  {t:64,  user:"alex_m",     role:"student",    msg:"x = 7", qtype:"answer"},
+  {t:66,  user:"sarah_j",    role:"student",    msg:"I got x=7 too", qtype:"answer"},
+  {t:68,  user:"tommy_w",    role:"student",    msg:"3x = 21 so x = 7!", qtype:"answer"},
+  {t:70,  user:"kai_r",      role:"student",    msg:"why do we always do addition/subtraction before multiplication?", qtype:"question"},
+  {t:75,  user:"priya_k",    role:"student",    msg:"is there a faster way to do this?", qtype:"question"},
+  {t:80,  user:"Mr. Rivera", role:"instructor", msg:"x = 7, great work! Kai — we isolate the variable term first by undoing addition/subtraction, then undo multiplication.", qtype:null},
+  {t:90,  user:"tommy_w",    role:"student",    msg:"can we do one with fractions? those mess me up", qtype:"question"},
+  {t:95,  user:"Mr. Rivera", role:"instructor", msg:"Sure! Try: (x/2) + 3 = 7", qtype:null},
+  {t:105, user:"alex_m",     role:"student",    msg:"x = 8", qtype:"answer"},
+  {t:107, user:"sarah_j",    role:"student",    msg:"I got x=8, multiply both sides by 2 at the end?", qtype:"answer"},
+  {t:110, user:"tommy_w",    role:"student",    msg:"I'm getting x = 2 but I think I messed up", qtype:"error"},
+  {t:112, user:"kai_r",      role:"student",    msg:"do you multiply by 2 first or subtract 3 first?", qtype:"question"},
+  {t:118, user:"priya_k",    role:"student",    msg:"x=8. subtract 3 to get x/2=4 then multiply by 2", qtype:"answer"},
+];
+
+let transcript = [...SAMPLE];
+let msgIndex = 0;
+let playing = false;
+let timer = null;
+let queueItems = [];
+let responses = [];
+let selectedQ = null;
+
+function showView(v, btn) {
+  document.getElementById('view-sim').style.display    = v === 'sim'    ? 'block' : 'none';
+  document.getElementById('view-report').style.display = v === 'report' ? 'block' : 'none';
+  document.getElementById('view-upload').style.display = v === 'upload' ? 'block' : 'none';
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (v === 'report') renderReport();
+}
+
+function getDelay() { return parseInt(document.getElementById('speed-sel').value); }
+
+function togglePlay() {
+  playing = !playing;
+  const btn = document.getElementById('play-btn');
+  btn.textContent = playing ? 'Pause' : 'Play';
+  btn.classList.toggle('active', playing);
+  if (playing) tick();
+  else clearTimeout(timer);
+}
+
+function tick() {
+  if (!playing) return;
+  if (msgIndex >= transcript.length) {
+    playing = false;
+    const btn = document.getElementById('play-btn');
+    btn.textContent = 'Done';
+    btn.disabled = true;
+    btn.classList.remove('active');
+    markSkipped();
+    return;
+  }
+  addMessage(transcript[msgIndex]);
+  msgIndex++;
+  updateProgress();
+  timer = setTimeout(tick, getDelay());
+}
+
+function addMessage(m) {
+  const cl = document.getElementById('classroom');
+  const roleClass = { instructor: 'av-inst', student: 'av-student', system: 'av-system', assistant: 'av-whisper' };
+  const initials = m.user.split(' ').map(w => w[0].toUpperCase()).join('').slice(0, 2);
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = `
+    <div class="msg-header">
+      <div class="avatar ${roleClass[m.role] || 'av-student'}">${initials}</div>
+      <span class="msg-name">${m.user}</span>
+      <span class="msg-time">${formatTime(m.t)}</span>
+    </div>
+    <div class="msg-body${m.role === 'system' ? ' system' : ''}">${m.msg}</div>`;
+  cl.appendChild(div);
+  cl.scrollTop = cl.scrollHeight;
+  if (m.role === 'student' && m.qtype) addToQueue(m);
+}
+
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
+function addToQueue(m) {
+  const labelMap = { question: 'question', error: 'mistake', confused: 'confused', idle: 'idle', answer: '', realizing: '' };
+  const classMap = { question: 'q-q', error: 'q-err', confused: 'q-err', idle: 'q-idle' };
+  const id = 'q_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+  queueItems.push({ id, m, responded: false });
+  const div = document.createElement('div');
+  div.className = 'q-item';
+  div.id = id;
+  const label = labelMap[m.qtype];
+  const badge = label ? `<span class="q-badge ${classMap[m.qtype] || ''}">${label}</span>` : '';
+  div.innerHTML = `<div class="q-name">${m.user}${badge}</div><div class="q-text">${m.msg.slice(0, 60)}${m.msg.length > 60 ? '…' : ''}</div>`;
+  div.onclick = () => selectQ(id, m);
+  document.getElementById('queue').appendChild(div);
+  updateQCount();
+}
+
+function selectQ(id, m) {
+  document.querySelectorAll('.q-item').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('selected');
+  selectedQ = { id, m };
+  document.getElementById('whisper-to').style.display = 'block';
+  document.getElementById('whisper-target').textContent = m.user;
+  document.getElementById('queue-notice').style.display = 'none';
+  document.getElementById('whisper-row').style.display = 'flex';
+  document.getElementById('send-btn').classList.add('ready');
+  document.getElementById('whisper-input').focus();
+}
+
+function sendWhisper() {
+  if (!selectedQ) return;
+  const txt = document.getElementById('whisper-input').value.trim();
+  if (!txt) return;
+  responses.push({ qid: selectedQ.id, student: selectedQ.m.user, original: selectedQ.m.msg, response: txt, skipped: false });
+  const el = document.getElementById(selectedQ.id);
+  if (el) { el.classList.add('responded'); el.classList.remove('selected'); }
+  const idx = queueItems.findIndex(q => q.id === selectedQ.id);
+  if (idx >= 0) queueItems[idx].responded = true;
+  const cl = document.getElementById('classroom');
+  const wdiv = document.createElement('div');
+  wdiv.className = 'msg';
+  wdiv.innerHTML = `
+    <div class="msg-header">
+      <div class="avatar av-whisper">TA</div>
+      <span class="msg-name">You → ${selectedQ.m.user}</span>
+      <span class="msg-time">whisper</span>
+    </div>
+    <div class="msg-body whisper">${txt}</div>`;
+  cl.appendChild(wdiv);
+  cl.scrollTop = cl.scrollHeight;
+  document.getElementById('whisper-input').value = '';
+  document.getElementById('whisper-to').style.display = 'none';
+  document.getElementById('queue-notice').style.display = 'block';
+  document.getElementById('whisper-row').style.display = 'none';
+  document.getElementById('send-btn').classList.remove('ready');
+  selectedQ = null;
+  updateQCount();
+}
+
+function updateQCount() {
+  const pending = queueItems.filter(q => !q.responded).length;
+  document.getElementById('q-count').textContent = pending + ' pending';
+}
+
+function updateProgress() {
+  const pct = Math.round((msgIndex / transcript.length) * 100);
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('msg-counter').textContent = msgIndex + ' / ' + transcript.length;
+}
+
+function markSkipped() {
+  queueItems.forEach(q => {
+    if (!q.responded) {
+      responses.push({ qid: q.id, student: q.m.user, original: q.m.msg, response: null, skipped: true });
+    }
+  });
+}
+
+function resetSim() {
+  clearTimeout(timer);
+  playing = false;
+  msgIndex = 0;
+  queueItems = [];
+  responses = [];
+  selectedQ = null;
+  document.getElementById('classroom').innerHTML = '';
+  document.getElementById('queue').innerHTML = '';
+  const btn = document.getElementById('play-btn');
+  btn.textContent = 'Play';
+  btn.disabled = false;
+  btn.classList.remove('active');
+  document.getElementById('prog-bar').style.width = '0%';
+  document.getElementById('msg-counter').textContent = '0 / ' + transcript.length;
+  document.getElementById('whisper-to').style.display = 'none';
+  document.getElementById('queue-notice').style.display = 'block';
+  document.getElementById('whisper-row').style.display = 'none';
+  document.getElementById('send-btn').classList.remove('ready');
+  document.getElementById('q-count').textContent = '0 pending';
+}
+
+function renderReport() {
+  const sent    = responses.filter(r => !r.skipped).length;
+  const total   = queueItems.length || responses.length;
+  const skipped = responses.filter(r => r.skipped).length;
+  document.getElementById('r-sent').textContent    = sent;
+  document.getElementById('r-total').textContent   = total || '—';
+  document.getElementById('r-skipped').textContent = skipped;
+  const log = document.getElementById('response-log');
+  if (responses.length === 0) {
+    log.innerHTML = '<div class="notice">Complete the simulation to see your response log.</div>';
+    return;
+  }
+  log.innerHTML = '';
+  responses.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'log-item';
+    const tag = r.skipped ? '<span class="tag tag-skipped">skipped</span>' : '<span class="tag tag-good">responded</span>';
+    div.innerHTML = `
+      <div class="log-student">${r.student} ${tag}</div>
+      <div class="log-original">"${r.original}"</div>
+      ${r.response
+        ? `<div class="log-response">${r.response}</div>`
+        : `<div class="log-response" style="color:#aaa;font-style:italic">No response sent</div>`}`;
+    log.appendChild(div);
+  });
+}
+
+function loadCSV() {
+  const raw = document.getElementById('csv-input').value.trim();
+  const err = document.getElementById('csv-error');
+  err.style.display = 'none';
+  if (!raw) { err.textContent = 'Paste CSV data first.'; err.style.display = 'block'; return; }
+  const lines = raw.split('\n').filter(l => l.trim());
+  const header = lines[0].toLowerCase().split(',').map(s => s.trim());
+  const ti = header.indexOf('timestamp'), ui = header.indexOf('username'), ri = header.indexOf('role'), mi = header.indexOf('message');
+  if (ti < 0 || ui < 0 || ri < 0 || mi < 0) {
+    err.textContent = 'Missing columns. Need: timestamp, username, role, message';
+    err.style.display = 'block';
+    return;
+  }
+  const parsed = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    if (cols.length < 4) continue;
+    const ts = cols[ti].trim();
+    const parts = ts.split(':').map(Number);
+    const secs = parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0];
+    const role = cols[ri].trim().toLowerCase();
+    parsed.push({ t: secs, user: cols[ui].trim(), role, msg: cols.slice(mi).join(',').trim().replace(/^"|"$/g, ''), qtype: role === 'student' ? 'question' : null });
+  }
+  if (parsed.length === 0) { err.textContent = 'No valid rows found.'; err.style.display = 'block'; return; }
+  transcript = [...parsed];
+  resetSim();
+  showView('sim', document.querySelectorAll('.view-btn')[0]);
+}
+
+function loadSample() {
+  transcript = [...SAMPLE];
+  document.getElementById('csv-input').value = '';
+  resetSim();
+}
+
+document.getElementById('whisper-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendWhisper(); }
+});
+
+resetSim();
+</script>
+</body>
+</html>
